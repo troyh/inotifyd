@@ -1,6 +1,23 @@
 CXXFLAGS=-I/usr/include/libxml2
 
-inotifyd: inotifyd.o Config.o
+all: inotifyd fsevents
+
+inotifyd: inotifyd.o 
 	g++ -o $@ $^ -lc -lboost_filesystem -lxml2
 	
-Config.o: Config.cc Config.h
+fsevents: fsevents.o
+	g++ -o $@ $^ -lc
+
+clean:
+	rm -f *.o inotifyd
+	
+install: /usr/sbin/inotifyd /etc/init.d/inotifyd /etc/rc2.d/S15inotifyd
+
+/etc/rc2.d/S15inotifyd: /etc/init.d/inotifyd
+	if [ ! -f $@ ]; then ln -s /etc/init.d/inotifyd $@; fi
+	
+/usr/sbin/inotifyd: inotifyd
+	cp inotifyd $@
+
+/etc/init.d/inotifyd: install/inotifyd.init.sh
+	cp $< $@

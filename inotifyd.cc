@@ -6,44 +6,76 @@
 #include <iostream>
 #include <fstream>
 #include <map>
+#include <set>
 #include <sys/inotify.h>
+#include <sys/stat.h>
 #include <linux/limits.h>
 #include <boost/filesystem/operations.hpp>
 #include <boost/filesystem/path.hpp>
 #include <libxml/parser.h>
 #include <libxml/xpath.h>
-#include "Config.h"
 
 using namespace std;
+
+class FileWatch
+{
+	string m_obj;
+	bool m_recurse;
+	string m_log;
+public:
+	FileWatch();
+	FileWatch(const char* objname,bool recursive,const char* logfile);
+	FileWatch(const FileWatch& fw);
+	~FileWatch() {}
+	
+	string objname() const { return m_obj; }
+	bool recursive() const { return m_recurse; }
+	string logfile() const { return m_log; }
+	
+	bool operator<(const FileWatch& fw) const;
+	FileWatch& operator=(const FileWatch& fw);
+};
+
+FileWatch::FileWatch() 
+	: m_recurse(false)
+{
+}
+
+FileWatch::FileWatch(const FileWatch& fw) 
+	: m_obj(fw.m_obj), m_recurse(fw.m_recurse), m_log(fw.m_log)
+{
+}
+
+FileWatch::FileWatch(const char* objname,bool recursive,const char* logfile) 
+	: m_obj(objname), m_recurse(recursive), m_log(logfile)
+{
+}
+
+bool FileWatch::operator<(const FileWatch& fw) const
+{
+	return m_obj < fw.m_obj;
+}
+
+FileWatch& FileWatch::operator=(const FileWatch& fw) 
+{
+	m_obj=fw.m_obj;
+	m_recurse=fw.m_recurse;
+	m_log=fw.m_log;
+	return *this;
+}
+
+ostream& operator<<(ostream& os, FileWatch& fw) 
+{
+	os << fw.objname() << " (" << (fw.recursive()?"yes":"no") << ") -> " << fw.logfile();
+	return os;
+}
+
+
 namespace fs=boost::filesystem;
 
-// struct flagtypes {
-// 	uint32_t bit;
-// 	const char* str;
-// };
-// flagtypes flags[]={
-// 	{IN_ACCESS       ,"ACCESS"			},
-// 	{IN_MODIFY       ,"MODIFY"          },
-// 	{IN_ATTRIB       ,"ATTRIB"          },
-// 	{IN_CLOSE_WRITE  ,"CLOSE_WRITE"     },
-// 	{IN_CLOSE_NOWRITE,"CLOSE_NOWRITE"   },
-// 	{IN_OPEN         ,"OPEN"            },
-// 	{IN_MOVED_FROM   ,"MOVED_FROM"      },
-// 	{IN_MOVED_TO     ,"MOVED_TO"        },
-// 	{IN_CREATE       ,"CREATE"          },
-// 	{IN_DELETE       ,"DELETE"          },
-// 	{IN_DELETE_SELF  ,"DELETE_SELF"     },
-// 	{IN_MOVE_SELF    ,"MOVE_SELF"       },
-// 	{IN_UNMOUNT      ,"UNMOUNT"         },
-// 	{IN_Q_OVERFLOW   ,"Q_OVERFLOW"      },
-// 	{IN_IGNORED      ,"IGNORED"         },
-// 	{IN_ISDIR      	 ,"ISDIR"         },
-// };
+static const char* const CONFIG_FILE="/etc/inotify.conf";
+static const char* const PIDFILE="/var/run/inotifyd.pid";
 
-static const char* config_file="/etc/inotify.conf";
-static const char* logfile="/var/log/inotify.log";
-static string watchdir="/home/troy/";
-static bool recursive=true;
 static bool g_sighup=false;
 static bool g_quit=false;
 
@@ -64,7 +96,7 @@ void sig_handler(int signal)
 	}
 }
 
-int read_config(const char* fname,Config& cfg) 
+int read_config(const char* fname,set<FileWatch>& cfg) 
 {
 	xmlDocPtr doc;
 	xmlNodePtr cur;
@@ -109,7 +141,8 @@ int read_config(const char* fname,Config& cfg)
 		
 		if (objname && logfile)
 		{
-			cfg.addWatch((char*)objname,xmlStrcmp(recursive,(const xmlChar*)"yes")?true:false,(char*)logfile);
+			FileWatch watch((char*)objname,!xmlStrcmp(recursive,(const xmlChar*)"yes")?true:false,(char*)logfile);
+			cfg.insert(watch);
 		}
 		else
 		{
@@ -126,20 +159,47 @@ int read_config(const char* fname,Config& cfg)
 
 int main(int argc,char* argv[])
 {
-	Config cfg;
-	read_config(config_file,cfg);
-	return 0;
+	bool bNoDaemon=false;
 	
-	int pid=fork();
-	if (pid)  // Child started, we can quit
+	// TODO: provide for these arguments:
+	// --nodaemon to not run as a daemon
+	// --config to specify an alternate config file
+	
+	set<FileWatch> cfg;
+	read_config(CONFIG_FILE,cfg);
+	
+	// Check config for correctness
+	for (set<FileWatch>::iterator itr=cfg.begin(); itr!=cfg.end(); ++itr)
 	{
-		cout << "Process ID " << pid << endl;
-		return 0;
+		struct stat statbuf;
+		if (stat((*itr).objname().c_str(),&statbuf))
+		{
+			cerr << "Cannot stat " << (*itr).objname() << endl;
+			cfg.erase(*itr);
+		}
 	}
-	else if (pid<0) // fork() failed
+	
+	if (cfg.empty())
 	{
-		cerr << "Unable to daemonize. (" << errno << ")" << endl;
-		return 1;
+		cerr << "No objects to watch. Not running." << endl;
+		return 2;
+	}
+	
+	if (!bNoDaemon) 
+	{
+		int pid=fork();
+		if (pid)  // Child started, we can quit
+		{
+			// Write pid to PIDFILE
+			ofstream pidfile(PIDFILE);
+			pidfile << pid << endl;
+			return 0;
+		}
+		else if (pid<0) // fork() failed
+		{
+			cerr << "Unable to daemonize. (" << errno << ")" << endl;
+			return 1;
+		}
 	}
 	
 	struct sigaction sig_data=
@@ -162,29 +222,43 @@ int main(int argc,char* argv[])
 	
 	while (!g_quit) 
 	{
+		// Set up watches
 		int fd=inotify_init();
-		map<int,std::string> wds;
-		int wd=inotify_add_watch(fd,watchdir.c_str(),IN_ALL_EVENTS);
+		map<int,FileWatch> wds;
 		
-		wds.insert(make_pair(wd,watchdir));
-		if (recursive)
-		{
-			fs::directory_iterator end_itr;
-			for (fs::directory_iterator itr(watchdir); itr!=end_itr; ++itr)
+		try {
+			for (set<FileWatch>::iterator seti=cfg.begin(); seti!=cfg.end(); ++seti)
 			{
-				if (fs::is_directory(itr->status()))
+				FileWatch watch=*seti;
+				
+				// cout << "Logging events to " << watch.logfile() << " for these directories:" << endl;
+				// cout << watch.objname() << endl;
+				int wd=inotify_add_watch(fd,watch.objname().c_str(),IN_ALL_EVENTS);
+		
+				wds.insert(make_pair(wd,watch));
+				if (watch.recursive())
 				{
-					wd=inotify_add_watch(fd,itr->path().string().c_str(),IN_ALL_EVENTS);
-					wds.insert(make_pair(wd,itr->path().string()));
+					fs::directory_iterator end_itr;
+					for (fs::directory_iterator itr(watch.objname()); itr!=end_itr; ++itr)
+					{
+						if (fs::is_directory(itr->status()))
+						{
+							// cout << itr->path().string() << endl;
+							wd=inotify_add_watch(fd,itr->path().string().c_str(),IN_ALL_EVENTS);
+							wds.insert(make_pair(wd,FileWatch(itr->path().string().c_str(),watch.recursive(),watch.logfile().c_str())));
+						}
+					}
 				}
 			}
+		}
+		catch (exception& x) 
+		{
+			// TODO: log to syslog
+			cerr << "Error watching directory:" << x.what() << endl;
 		}
 		
 		g_sighup=false;
 	
-		ofstream logf(logfile,ios::app|ios::out);
-		// TODO: fail if can't open logfile
-		
 		while (!g_sighup)
 		{
 			char buf[16*1024]; // 16K is enough for about 1000 events
@@ -195,16 +269,22 @@ int main(int argc,char* argv[])
 			}
 			else
 			{
-				// TODO: if failed to open or write to log, log error to syslog
 				time_t now=time(0);
 				for(size_t i = 0; i < n; )
 				{
 					inotify_event* event=(inotify_event*)(&buf[i]);
 					
-					logf << wds[event->wd];
-					if (event->len)
-						logf << '/' << event->name;
-					logf << '\t' << now << '\t' << event->mask << '\t' << event->cookie << endl;
+					// Only log write events
+					if (event->mask & (IN_CLOSE_WRITE|IN_CREATE|IN_DELETE|IN_DELETE_SELF|IN_MODIFY|IN_MOVE_SELF|IN_MOVED_FROM|IN_MOVED_TO))
+					{
+						ofstream logf(wds[event->wd].logfile().c_str(),ios::app|ios::out);
+						// TODO: log to syslog if can't open logfile
+						
+						logf << wds[event->wd].objname();
+						if (event->len)
+							logf << '/' << event->name;
+						logf << '\t' << now << '\t' << event->mask << '\t' << event->cookie << endl;
+					}
 				
 					i+=sizeof(inotify_event) + event->len;
 				}
@@ -214,7 +294,7 @@ int main(int argc,char* argv[])
 		// Remove all watches
 		if (!wds.empty())
 		{
-			for (map<int,string>::iterator itr=wds.begin();itr!=wds.end();++itr) 
+			for (map<int,FileWatch>::iterator itr=wds.begin();itr!=wds.end();++itr) 
 			{
 				// cout << "Removing watch: " << itr->second << '(' << itr->first << ')' << endl;
 				inotify_rm_watch(fd,itr->first);
@@ -224,6 +304,8 @@ int main(int argc,char* argv[])
 		
 		close(fd);
 	}
+	
+	remove(PIDFILE);
 
 	return 0;
 }

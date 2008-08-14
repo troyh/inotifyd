@@ -3,43 +3,81 @@
 <plist version="1.0">
 <dict>
 	<key>currentDocument</key>
-	<string>Makefile</string>
+	<string>../../troy/inotifyd/fsevents.cc</string>
 	<key>documents</key>
 	<array>
 		<dict>
 			<key>filename</key>
 			<string>Makefile</string>
 			<key>lastUsed</key>
-			<date>2008-08-11T21:02:02Z</date>
+			<date>2008-08-14T21:47:55Z</date>
+		</dict>
+		<dict>
+			<key>filename</key>
+			<string>Config.h</string>
+			<key>lastUsed</key>
+			<date>2008-08-14T18:43:16Z</date>
+		</dict>
+		<dict>
+			<key>filename</key>
+			<string>Config.cc</string>
+			<key>lastUsed</key>
+			<date>2008-08-14T18:43:17Z</date>
+		</dict>
+		<dict>
+			<key>filename</key>
+			<string>../../troy/inotifyd/fsevents.cc</string>
+			<key>lastUsed</key>
+			<date>2008-08-14T21:52:02Z</date>
 			<key>selected</key>
 			<true/>
 		</dict>
 		<dict>
 			<key>filename</key>
+			<string>../../troy/inotifyd/install/inotifyd.init.sh</string>
+			<key>lastUsed</key>
+			<date>2008-08-14T21:45:19Z</date>
+		</dict>
+		<dict>
+			<key>filename</key>
 			<string>inotifyd.cc</string>
 			<key>lastUsed</key>
-			<date>2008-08-11T21:02:02Z</date>
+			<date>2008-08-14T21:52:02Z</date>
 		</dict>
 	</array>
 	<key>fileHierarchyDrawerWidth</key>
 	<integer>200</integer>
 	<key>metaData</key>
 	<dict>
-		<key>Makefile</key>
+		<key>../../troy/inotifyd/fsevents.cc</key>
 		<dict>
 			<key>caret</key>
 			<dict>
 				<key>column</key>
-				<integer>11</integer>
+				<integer>0</integer>
 				<key>line</key>
-				<integer>6</integer>
+				<integer>26</integer>
 			</dict>
 			<key>firstVisibleColumn</key>
 			<integer>0</integer>
 			<key>firstVisibleLine</key>
 			<integer>0</integer>
 		</dict>
-		<key>inotifyd.cc</key>
+		<key>../../troy/inotifyd/install/inotifyd.init.sh</key>
+		<dict>
+			<key>caret</key>
+			<dict>
+				<key>column</key>
+				<integer>0</integer>
+				<key>line</key>
+				<integer>27</integer>
+			</dict>
+			<key>firstVisibleColumn</key>
+			<integer>0</integer>
+			<key>firstVisibleLine</key>
+			<integer>0</integer>
+		</dict>
+		<key>Makefile</key>
 		<dict>
 			<key>caret</key>
 			<dict>
@@ -53,15 +91,31 @@
 			<key>firstVisibleLine</key>
 			<integer>0</integer>
 		</dict>
+		<key>inotifyd.cc</key>
+		<dict>
+			<key>caret</key>
+			<dict>
+				<key>column</key>
+				<integer>0</integer>
+				<key>line</key>
+				<integer>0</integer>
+			</dict>
+			<key>firstVisibleColumn</key>
+			<integer>0</integer>
+			<key>firstVisibleLine</key>
+			<integer>0</integer>
+		</dict>
 	</dict>
 	<key>openDocuments</key>
 	<array>
 		<string>inotifyd.cc</string>
+		<string>../../troy/inotifyd/install/inotifyd.init.sh</string>
+		<string>../../troy/inotifyd/fsevents.cc</string>
 		<string>Makefile</string>
 	</array>
 	<key>showFileHierarchyDrawer</key>
 	<true/>
 	<key>windowFrame</key>
-	<string>{{1492, 128}, {1030, 1054}}</string>
+	<string>{{1501, 76}, {1030, 1054}}</string>
 </dict>
 </plist>
