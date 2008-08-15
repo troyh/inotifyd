@@ -157,6 +157,24 @@ int read_config(const char* fname,set<FileWatch>& cfg)
 	return 0;
 }
 
+size_t watchsubdirectories(int fd,const FileWatch& watch,map<int,FileWatch>& wds)
+{
+	fs::directory_iterator end_itr;
+	for (fs::directory_iterator itr(watch.objname()); itr!=end_itr; ++itr)
+	{
+		if (fs::is_directory(itr->status()))
+		{
+			// cout << itr->path().string() << endl;
+			int wd=inotify_add_watch(fd,itr->path().string().c_str(),IN_ALL_EVENTS);
+			wds.insert(make_pair(wd,FileWatch(itr->path().string().c_str(),watch.recursive(),watch.logfile().c_str())));
+			
+			FileWatch subwatch(itr->path().string().c_str(),watch.recursive(),watch.logfile().c_str());
+			watchsubdirectories(fd,subwatch,wds);
+		}
+	}
+}
+
+
 int main(int argc,char* argv[])
 {
 	bool bNoDaemon=false;
@@ -234,20 +252,11 @@ int main(int argc,char* argv[])
 				// cout << "Logging events to " << watch.logfile() << " for these directories:" << endl;
 				// cout << watch.objname() << endl;
 				int wd=inotify_add_watch(fd,watch.objname().c_str(),IN_ALL_EVENTS);
-		
 				wds.insert(make_pair(wd,watch));
-				if (watch.recursive())
+				
+				if (fs::is_directory(watch.objname()) && watch.recursive()) 
 				{
-					fs::directory_iterator end_itr;
-					for (fs::directory_iterator itr(watch.objname()); itr!=end_itr; ++itr)
-					{
-						if (fs::is_directory(itr->status()))
-						{
-							// cout << itr->path().string() << endl;
-							wd=inotify_add_watch(fd,itr->path().string().c_str(),IN_ALL_EVENTS);
-							wds.insert(make_pair(wd,FileWatch(itr->path().string().c_str(),watch.recursive(),watch.logfile().c_str())));
-						}
-					}
+					watchsubdirectories(fd,watch,wds);
 				}
 			}
 		}

@@ -11,7 +11,7 @@ fsevents: fsevents.o
 clean:
 	rm -f *.o inotifyd
 	
-install: /usr/sbin/inotifyd /etc/init.d/inotifyd /etc/rc2.d/S15inotifyd
+install: /usr/sbin/inotifyd /usr/bin/fsevents /etc/init.d/inotifyd /etc/rc2.d/S15inotifyd
 
 /etc/rc2.d/S15inotifyd: /etc/init.d/inotifyd
 	if [ ! -f $@ ]; then ln -s /etc/init.d/inotifyd $@; fi
@@ -20,4 +20,7 @@ install: /usr/sbin/inotifyd /etc/init.d/inotifyd /etc/rc2.d/S15inotifyd
 	cp inotifyd $@
 
 /etc/init.d/inotifyd: install/inotifyd.init.sh
+	cp $< $@
+	
+/usr/bin/fsevents: fsevents
 	cp $< $@
