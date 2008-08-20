@@ -75,6 +75,7 @@ namespace fs=boost::filesystem;
 
 static const char* const CONFIG_FILE="/etc/inotify.conf";
 static const char* const PIDFILE="/var/run/inotifyd.pid";
+const uint32_t EVENTS_WE_CARE_ABOUT=(IN_CLOSE_WRITE|IN_CREATE|IN_DELETE|IN_DELETE_SELF|IN_MODIFY|IN_MOVE_SELF|IN_MOVED_FROM|IN_MOVED_TO);
 
 static bool g_sighup=false;
 static bool g_quit=false;
@@ -165,7 +166,7 @@ size_t watchsubdirectories(int fd,const FileWatch& watch,map<int,FileWatch>& wds
 		if (fs::is_directory(itr->status()))
 		{
 			// cout << itr->path().string() << endl;
-			int wd=inotify_add_watch(fd,itr->path().string().c_str(),IN_ALL_EVENTS);
+			int wd=inotify_add_watch(fd,itr->path().string().c_str(),EVENTS_WE_CARE_ABOUT);
 			wds.insert(make_pair(wd,FileWatch(itr->path().string().c_str(),watch.recursive(),watch.logfile().c_str())));
 			
 			FileWatch subwatch(itr->path().string().c_str(),watch.recursive(),watch.logfile().c_str());
@@ -251,7 +252,7 @@ int main(int argc,char* argv[])
 				
 				// cout << "Logging events to " << watch.logfile() << " for these directories:" << endl;
 				// cout << watch.objname() << endl;
-				int wd=inotify_add_watch(fd,watch.objname().c_str(),IN_ALL_EVENTS);
+				int wd=inotify_add_watch(fd,watch.objname().c_str(),EVENTS_WE_CARE_ABOUT);
 				wds.insert(make_pair(wd,watch));
 				
 				if (fs::is_directory(watch.objname()) && watch.recursive()) 
@@ -283,16 +284,42 @@ int main(int argc,char* argv[])
 				{
 					inotify_event* event=(inotify_event*)(&buf[i]);
 					
-					// Only log write events
-					if (event->mask & (IN_CLOSE_WRITE|IN_CREATE|IN_DELETE|IN_DELETE_SELF|IN_MODIFY|IN_MOVE_SELF|IN_MOVED_FROM|IN_MOVED_TO))
+					// Only log events we care about
+					if (event->mask & EVENTS_WE_CARE_ABOUT)
 					{
 						ofstream logf(wds[event->wd].logfile().c_str(),ios::app|ios::out);
 						// TODO: log to syslog if can't open logfile
 						
 						logf << wds[event->wd].objname();
 						if (event->len)
+						{
 							logf << '/' << event->name;
+						}
 						logf << '\t' << now << '\t' << event->mask << '\t' << event->cookie << endl;
+					}
+					
+					if (event->mask & IN_ISDIR)
+					{
+						if (event->mask & IN_CREATE) // We have to start watching this new directory too
+						{
+							if (!event->len)
+							{
+								// TODO: log this, a new directory was created but we don't know its name
+							}
+							else
+							{
+								string newdirname=wds[event->wd].objname() + '/' + event->name;
+								int wd=inotify_add_watch(fd,newdirname.c_str(),EVENTS_WE_CARE_ABOUT);
+								wds.insert(make_pair(wd,FileWatch(newdirname.c_str(),wds[event->wd].recursive(),wds[event->wd].logfile().c_str())));
+							}
+						}
+						else if (event->mask & (IN_DELETE|IN_DELETE_SELF)) // We should stop watching this directory
+						{
+							if (event->len)
+							{
+								// TODO: implement this
+							}
+						}
 					}
 				
 					i+=sizeof(inotify_event) + event->len;
